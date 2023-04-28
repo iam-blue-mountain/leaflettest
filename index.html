@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Floor Map Example - Leaflet</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.3/dist/leaflet.css" integrity="sha512-mD70nAW2ThLsWH0zif8JPbfraZ8hbCtjQ+5RU1m4+ztZq6/MymyZeB55pWsi4YAX+73yvcaJyk61mzfYMvtm9w==" crossorigin="">
+  <script src="https://unpkg.com/leaflet@1.9.3/dist/leaflet.js" integrity="sha512-Dqm3h1Y4qiHUjbhxTuBGQsza0Tfppn53SHlu/uj1f+RT+xfShfe7r6czRf5r2NmllO2aKx+tYJgoxboOkn1Scg==" crossorigin="anonymous"></script>
+
+  <link rel="stylesheet" href="https://unpkg.com/flatpickr/dist/flatpickr.min.css">
+  <link rel="stylesheet" href="https://unpkg.com/flatpickr/dist/themes/airbnb.css">
+  <script src="https://unpkg.com/flatpickr"></script>
+  <script src="https://unpkg.com/flatpickr/dist/l10n/ja.js"></script>
+
+  <script>
+    let map;
+    const bounds = [[0,0], [540,571]];
+    let layers = [];
+    let seatMap = {};
+    let seatData = {};
+    let latList = [478, 403, 368, 296, 261, 190, 155, 85, 50];
+    let lonList = [135, 198, 261, 324, 388, 451];
+
+    function init() {
+      map = L.map('mapcontainer', {crs: L.CRS.Simple, boxZoom: false, dragging: false, doubleClickZoom: false, scrollWheelZoom: false, zoomControl: false});
+
+      let baseMaps = {
+        '6F': L.imageOverlay('seat6f.png', bounds),
+        '7F': L.imageOverlay('seat7f.png', bounds)
+      }
+      L.control.layers(baseMaps).addTo(map);
+
+      getData();
+      
+      mapLoad();
+    }
+
+    function rectBounds(lat, lon) {
+      return [[lat, lon], [lat - 35, lon - 60]];
+    }
+  
+    function mapLoad() {
+      map.on('baselayerchange', (event) => {
+        layers.forEach(function(layer){
+          map.removeLayer(layer);
+        });
+        seatMap = {};
+
+        if (event.name == '7F') {
+          // 長方形を描画するための緯度経度だけをセットした座席表の初期データを生成
+          let i = 0;
+          latList.forEach(function(lat){
+            lonList.forEach(function(lon){
+              seatMap[i] = {'lat': lat, 'lon': lon, 'name': '', 'start': '', 'end': ''};
+              i++;
+            });
+          });
+          
+          Object.keys(seatMap).forEach(function(key){
+            // 座席表の初期データに実際の座席データをマージ
+            seatMap[key] = {...seatMap[key], ...seatData[key]};
+
+            // 長方形の描画、ツールチップの生成
+            let color = seatMap[key].name == '' ? 'blue' : 'red';
+            let layer = L.rectangle(rectBounds(seatMap[key].lat, seatMap[key].lon), {'color': color, 'weight': 2}).addTo(map);
+            layers.push(layer);
+            layer.bindTooltip(seatMap[key].name == '' ? key : seatMap[key].name, {'permanent': true, 'direction': 'center'});
+            let popupText = key;
+            if (seatMap[key].name == '') {
+              popupText = `<form id="form${key}">
+                <input type="text" placeholder="name" id="name${key}" required><br>
+                <input class="input" placeholder="Select Start Date.." id="start${key}" type="text" required><br>
+                <input class="input" placeholder="Select End Date.." id="end${key}" type="text" required><br>
+                <button type="button" id="register${key}">登録</button>
+                </form>`;
+            } else {
+              popupText = `${seatMap[key].name}<br>開始: ${seatMap[key].start}<br>終了: ${seatMap[key].end}<br><button id="delete${key}">削除</button>`;
+            }
+            layer.openTooltip().bindPopup(popupText, {'key': key});
+          });
+        }
+      });
+
+      map.on('popupopen', (event) => {
+        const key = event.popup.options.key;
+        let btn = document.getElementById(`register${key}`);
+        if (btn != null) {
+          // 各項目設定
+          // 日付テキスト
+          const minDate = new Date();
+          flatpickr(`#start${key}`, {'locale': 'ja', 'allowInput': true, 'enableTime': true, 'defaultHour': 9, 'minDate': minDate});
+          flatpickr(`#end${key}`, {'locale': 'ja', 'allowInput': true, 'enableTime': true, 'defaultHour': 17, 'defaultMinute': 30, 'minDate': minDate});
+          // 登録ボタン
+          btn.disabled = true;
+
+          // 各入力項目更新時イベント
+          const update = function() {
+            const button = document.getElementById(`register${key}`);
+            const isRequired = document.getElementById(`form${key}`).checkValidity();
+
+            if (isRequired) {
+              button.disabled = false;
+            } else {
+              button.disabled = true;
+            }
+          };
+          const form = document.getElementById(`form${key}`);
+          form.addEventListener("input", update)
+          form.addEventListener("change", update)
+
+          // 登録ボタンイベント
+          btn.onclick = function() {
+            registerData(key, {
+              'name': document.getElementById(`name${key}`).value,
+              'start': document.getElementById(`start${key}`).value,
+              'end': document.getElementById(`end${key}`).value
+            });
+            getData();
+            mapLoad();
+          };
+        }
+
+        btn = document.getElementById(`delete${key}`);
+        if (btn != null) {
+          // 削除ボタンイベント
+          btn.onclick = function() {
+            deleteData(key);
+            getData();
+            mapLoad();
+          };
+        }
+      });
+
+      // 初期表示
+      L.imageOverlay('seat7f.png', bounds).addTo(map);
+      map.fire('baselayerchange', {name: '7F'});
+
+      map.fitBounds(bounds);
+    }
+
+    function getData() {
+      seatData = seatData;
+    }
+
+    function registerData(key, obj) {
+      seatData[key] = obj;
+    }
+
+    function deleteData(key) {
+      delete seatData[key];
+    }
+  </script>
+  </head>
+<body onload="init()">
+<div id="mapcontainer" style="width: 700px; height: 700px;"></div>
+</body>
