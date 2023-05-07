@@ -12,6 +12,8 @@
   <link rel="stylesheet" href="https://unpkg.com/flatpickr/dist/themes/airbnb.css">
   <script src="https://unpkg.com/flatpickr"></script>
   <script src="https://unpkg.com/flatpickr/dist/l10n/ja.js"></script>
+  <script src="https://unpkg.com/moment/moment.js"></script>
+  <script src="https://unpkg.com/moment/locale/ja.js"></script>
 
   <script>
     let map;
@@ -70,7 +72,7 @@
             if (seatMap[key].name == '') {
               popupText = `<form id="form${key}">
                 <input type="text" placeholder="name" id="name${key}" required><br>
-                <input class="input" placeholder="Select Start Date.." id="start${key}" type="text" required><br>
+                <input class="input" id="start${key}" type="text" required readonly value="${moment(new Date()).format('YYYY-MM-DD HH:mm')}"><br>
                 <input class="input" placeholder="Select End Date.." id="end${key}" type="text" required><br>
                 <button type="button" id="register${key}">登録</button>
                 </form>`;
@@ -89,7 +91,6 @@
           // 各項目設定
           // 日付テキスト
           const minDate = new Date();
-          flatpickr(`#start${key}`, {'locale': 'ja', 'allowInput': true, 'enableTime': true, 'defaultHour': 9, 'minDate': minDate});
           flatpickr(`#end${key}`, {'locale': 'ja', 'allowInput': true, 'enableTime': true, 'defaultHour': 17, 'defaultMinute': 30, 'minDate': minDate});
           // 登録ボタン
           btn.disabled = true;
